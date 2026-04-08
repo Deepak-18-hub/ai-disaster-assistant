@@ -1,31 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>AI Disaster Assistant</title>
+  <meta charset="UTF-8">
+  <title>AI Disaster Assistant</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  <div class="container">
+    <header>
+      <h1>AI Disaster Assistant</h1>
+      <p class="subtitle">Survival Guide · Location Help · Multi‑language</p>
+    </header>
 
-<h1>🚨 AI Disaster Assistant</h1>
+    <form method="POST" action="/">
+      <label>Location (City / Area)</label>
+      <input type="text" name="location" required placeholder="e.g., Bengaluru">
 
-<label>Disaster:</label>
-<select id="disaster">
-    <option>Flood</option>
-    <option>Earthquake</option>
-    <option>Fire</option>
-</select>
+      <label>Disaster Type</label>
+      <select name="disaster_type" required>
+        <option value="" disabled selected>Select a disaster</option>
+        <option value="Earthquake">Earthquake</option>
+        <option value="Flood">Flood</option>
+        <option value="Fire">Fire</option>
+        <option value="Cyclone">Cyclone</option>
+        <option value="Landslide">Landslide</option>
+      </select>
 
-<br><br>
+      <label>Language</label>
+      <select name="language">
+        <option>English</option>
+        <option>Hindi</option>
+        <option>Kannada</option>
+        <option>Telugu</option>
+        <option>Tamil</option>
+        <option>Other</option>
+      </select>
 
-<label>Location:</label>
-<input type="text" id="location">
+      <button type="submit">Get AI Guidance</button>
+    </form>
 
-<br><br>
+    {% if user_data %}
+      <section class="card debug-card">
+        <h2>Debug Info (Test Only)</h2>
+        <p><strong>Location:</strong> {{ user_data.location }}</p>
+        <p><strong>Disaster type:</strong> {{ user_data.disaster_type }}</p>
+        <p><strong>Language:</strong> {{ user_data.language }}</p>
+      </section>
+    {% endif %}
 
-<button onclick="getHelp()">Get Help</button>
+    {% if advice %}
+      <section class="card panic">
+        <h2>🚨 Panic Mode – Do This Now</h2>
+        <ul>
+          {% for item in advice.panic_now %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </section>
 
-<p id="result"></p>
+      <section class="card">
+        <h2>Before the Disaster</h2>
+        <ul>
+          {% for item in advice.before %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </section>
 
-<script src="/static/script.js"></script>
+      <section class="card">
+        <h2>During the Disaster</h2>
+        <ul>
+          {% for item in advice.during %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </section>
 
+      <section class="card">
+        <h2>After the Disaster</h2>
+        <ul>
+          {% for item in advice.after %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>Nearby Help</h2>
+        <ul>
+          {% for item in advice.nearby_help %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+
+        {% if user_data and user_data.location %}
+        <p class="maps-link">
+          Open in Maps:
+          <a target="_blank" rel="noopener noreferrer"
+             href="https://www.google.com/maps/search/emergency+hospital+near+{{ user_data.location | urlencode }}">
+            Emergency services near {{ user_data.location }}
+          </a>
+        </p>
+        {% endif %}
+      </section>
+    {% endif %}
+  </div>
 </body>
 </html>
