@@ -1,1 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Disaster Assistant</title>
+</head>
+<body>
 
+<h1>🚨 AI Disaster Assistant</h1>
+
+<label>Disaster:</label>
+<select id="disaster">
+    <option>Flood</option>
+    <option>Earthquake</option>
+    <option>Fire</option>
+</select>
+
+<br><br>
+
+<label>Location:</label>
+<input type="text" id="location">
+
+<br><br>
+
+<button onclick="getHelp()">Get Help</button>
+
+<p id="result"></p>
+
+<script src="/static/script.js"></script>
+
+</body>
+</html>
