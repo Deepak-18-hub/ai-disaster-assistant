@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, jsonify
-from openai import OpenAI
+import google.generativeai as genai
 
 app = Flask(__name__)
 
-client = OpenAI(api_key="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")
+genai.configure(api_key="AIzaSyDn5jR93G2PwG7WJhPjhre398GNkHfn9zg")
+
+model = genai.GenerativeModel("gemini-pro")
 
 @app.route("/")
 def home():
@@ -18,15 +20,11 @@ def get_help():
     try:
         prompt = f"Give short, clear survival steps for a {disaster} in {location}. Keep it simple."
 
-        ai_response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        response = ai_response.choices[0].message.content
+        ai_response = model.generate_content(prompt)
+        response = ai_response.text
 
     except:
-        # fallback logic
+        # fallback
         if disaster == "Flood":
             response = "Move to higher ground. Avoid water."
         elif disaster == "Earthquake":
