@@ -1,30 +1,25 @@
 import os
 from flask import Flask, render_template, request
 from google import genai
+from google.genai import types
 
 app = Flask(__name__)
 
-# Choose a widely available Gemini model
-# You can change this to another supported name from the docs if needed.
-PRIMARY_MODEL = "gemini-1.5-flash"  # text + good latency[web:331]
+PRIMARY_MODEL = "gemini-2.5-flash"
 
 
-def build_client() -> genai.Client | None:
-    """
-    Build a Gemini client using the GEMINI_API_KEY environment variable.
-    Returns None if the key is missing.
-    """
+def build_client():
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
-    return genai.Client(api_key=api_key)
+
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(api_version="v1")
+    )
 
 
 def call_gemini(prompt: str) -> str:
-    """
-    Call Gemini once with the configured model and return plain text.
-    Raises an exception if the call fails.
-    """
     client = build_client()
     if client is None:
         raise ValueError("GEMINI_API_KEY is not configured on the server.")
@@ -32,7 +27,7 @@ def call_gemini(prompt: str) -> str:
     response = client.models.generate_content(
         model=PRIMARY_MODEL,
         contents=prompt,
-    )  # standard generate_content use[web:217][web:350]
+    )
 
     text = getattr(response, "text", None)
     if not text or not text.strip():
@@ -42,14 +37,6 @@ def call_gemini(prompt: str) -> str:
 
 
 def parse_section(text: str, header: str, next_headers: list[str]) -> list[str]:
-    """
-    Extract bullet lines under a given header, until the next header.
-    Expects format like:
-
-    HEADER:
-    - bullet 1
-    - bullet 2
-    """
     header_tag = header + ":\n"
     start = text.find(header_tag)
     if start == -1:
@@ -75,32 +62,18 @@ def parse_section(text: str, header: str, next_headers: list[str]) -> list[str]:
 
 
 def parse_advice(text: str) -> dict:
-    """
-    Convert the raw Gemini text into a dict of sections,
-    always returning a valid structure.
-    """
     headers = ["PANIC_NOW", "BEFORE", "DURING", "AFTER", "NEARBY_HELP"]
 
-    panic_now = parse_section(text, "PANIC_NOW", headers[1:])
-    before = parse_section(text, "BEFORE", headers[2:])
-    during = parse_section(text, "DURING", headers[3:])
-    after = parse_section(text, "AFTER", headers[4:])
-    nearby_help = parse_section(text, "NEARBY_HELP", [])
-
     return {
-        "panic_now": panic_now,
-        "before": before,
-        "during": during,
-        "after": after,
-        "nearby_help": nearby_help,
+        "panic_now": parse_section(text, "PANIC_NOW", headers[1:]),
+        "before": parse_section(text, "BEFORE", headers[2:]),
+        "during": parse_section(text, "DURING", headers[3:]),
+        "after": parse_section(text, "AFTER", headers[4:]),
+        "nearby_help": parse_section(text, "NEARBY_HELP", []),
     }
 
 
 def get_disaster_advice(location: str, disaster_type: str, language: str) -> dict:
-    """
-    Ask Gemini for structured guidelines and parse them.
-    If anything fails, return a minimal error message in panic_now.
-    """
     prompt = f"""
 You are an emergency survival assistant.
 
@@ -153,17 +126,13 @@ Rules:
         raw_text = call_gemini(prompt)
         advice = parse_advice(raw_text)
 
-        # Ensure we always return the same keys even if Gemini misses one.
         for key in ["panic_now", "before", "during", "after", "nearby_help"]:
             advice.setdefault(key, [])
         return advice
 
     except Exception as e:
-        # Minimal, non–hard-coded fallback: just show the error, no fake advice.
         return {
-            "panic_now": [
-                "AI guidance is temporarily unavailable. Please try again in a few moments."
-            ],
+            "panic_now": ["AI guidance is temporarily unavailable. Please try again in a few moments."],
             "before": [],
             "during": [],
             "after": [],
@@ -193,5 +162,4 @@ def index():
 
 
 if __name__ == "__main__":
-    # For local testing; Render will use gunicorn app:app
     app.run(host="0.0.0.0", port=5000, debug=True)
