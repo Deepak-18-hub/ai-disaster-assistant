@@ -22,7 +22,7 @@ def _call_gemini(prompt: str, model_name: str) -> str:
         raise ValueError("Missing GEMINI_API_KEY")
 
     response = client.models.generate_content(
-        model=model_name,
+        model=PRIMARY_MODEL,
         contents=prompt
     )
     text = getattr(response, "text", None)
