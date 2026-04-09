@@ -1,25 +1,35 @@
 from flask import Flask, render_template, request
 from google import genai
-from google.genai import types, errors
 import os
 
 app = Flask(__name__)
 
-# ----- Gemini client configuration -----
-client = genai.Client(
-    http_options=types.HttpOptions(api_version="v1")
-)
 
-PRIMARY_MODEL = "gemini-2.5-flash"
-FALLBACK_MODEL = "gemini-2.5-pro"
+def build_client():
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None
+    return genai.Client(api_key=api_key)
+
+
+PRIMARY_MODEL = "gemini-1.5-flash"
+FALLBACK_MODEL = "gemini-1.5-pro"
 
 
 def _call_gemini(prompt: str, model_name: str) -> str:
-    result = client.models.generate_content(
+    client = build_client()
+    if client is None:
+        raise ValueError("Missing GEMINI_API_KEY")
+
+    response = client.models.generate_content(
         model=model_name,
-        contents=prompt,
+        contents=prompt
     )
-    return result.text.strip()
+    text = getattr(response, "text", None)
+    if text and text.strip():
+        return text.strip()
+
+    raise RuntimeError("Empty response from Gemini")
 
 
 def _parse_section(text: str, header: str, next_headers: list[str]) -> list[str]:
@@ -28,7 +38,7 @@ def _parse_section(text: str, header: str, next_headers: list[str]) -> list[str]
     if start == -1:
         return []
 
-    start = start + len(header_tag)
+    start += len(header_tag)
     end = len(text)
 
     for nh in next_headers:
@@ -36,13 +46,14 @@ def _parse_section(text: str, header: str, next_headers: list[str]) -> list[str]
         if idx != -1:
             end = min(end, idx)
 
-    section_block = text[start:end].strip()
-
+    block = text[start:end].strip()
     bullets = []
-    for line in section_block.splitlines():
+
+    for line in block.splitlines():
         line = line.strip()
         if line.startswith("-"):
-            bullets.append(line.lstrip("-").strip())
+            bullets.append(line[1:].strip())
+
     return bullets
 
 
@@ -56,24 +67,37 @@ def _parse_advice_plain(text: str) -> dict:
     nearby_help = _parse_section(text, "NEARBY_HELP", [])
 
     return {
-        "panic_now": panic_now,
-        "before": before,
-        "during": during,
-        "after": after,
-        "nearby_help": nearby_help,
+        "panic_now": panic_now or ["Stay calm and move to a safer area immediately."],
+        "before": before or ["Keep emergency supplies ready."],
+        "during": during or ["Follow official safety instructions."],
+        "after": after or ["Check for injuries and hazards before returning."],
+        "nearby_help": nearby_help or ["Contact local emergency responders if needed."]
+    }
+
+
+def fallback_advice(message: str) -> dict:
+    return {
+        "panic_now": [message],
+        "before": [
+            "Check your Gemini API key in Render Environment settings.",
+            "Make sure billing or free quota is available."
+        ],
+        "during": [
+            "Use gemini-1.5-flash for better availability.",
+            "Redeploy after updating the environment variable."
+        ],
+        "after": [
+            "Test locally first with the same API key.",
+            "Check Render logs for the exact error."
+        ],
+        "nearby_help": [
+            "For demo: show UI, multilingual flow, and emergency structure.",
+            "The app deployment is working; only AI access needs fixing."
+        ]
     }
 
 
 def get_disaster_advice(location: str, disaster_type: str, language: str) -> dict:
-    if not os.environ.get("GEMINI_API_KEY"):
-        return {
-            "panic_now": ["Server is not configured correctly. Please set GEMINI_API_KEY on the backend."],
-            "before": [],
-            "during": [],
-            "after": [],
-            "nearby_help": []
-        }
-
     prompt = f"""
 You are an emergency survival assistant.
 
@@ -124,40 +148,15 @@ Rules:
 
     try:
         text = _call_gemini(prompt, PRIMARY_MODEL)
-        advice = _parse_advice_plain(text)
-        return advice
-
-    except errors.ServerError:
+        return _parse_advice_plain(text)
+    except Exception:
         try:
             text = _call_gemini(prompt, FALLBACK_MODEL)
-            advice = _parse_advice_plain(text)
-            return advice
+            return _parse_advice_plain(text)
+        except ValueError:
+            return fallback_advice("Server setup incomplete: GEMINI_API_KEY is missing.")
         except Exception:
-            return {
-                "panic_now": ["AI service is temporarily unavailable. Please try again in a moment."],
-                "before": [],
-                "during": [],
-                "after": [],
-                "nearby_help": []
-            }
-
-    except errors.ClientError:
-        return {
-            "panic_now": ["AI request was rejected by the service. Check quota, model access, or billing."],
-            "before": [],
-            "during": [],
-            "after": [],
-            "nearby_help": []
-        }
-
-    except Exception:
-        return {
-            "panic_now": ["Unexpected error while contacting AI. Please try again later."],
-            "before": [],
-            "during": [],
-            "after": [],
-            "nearby_help": []
-        }
+            return fallback_advice("AI service is temporarily unavailable. Please check quota, billing, or model access.")
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -173,7 +172,7 @@ def index():
         user_data = {
             "location": location,
             "disaster_type": disaster_type,
-            "language": language,
+            "language": language
         }
 
         advice = get_disaster_advice(location, disaster_type, language)
@@ -182,4 +181,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
